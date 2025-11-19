@@ -1,6 +1,8 @@
 const fetch = require('node-fetch');
 
 module.exports = async (req, res) => {
+  console.log('🔔 API endpoint called');
+  
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -8,11 +10,13 @@ module.exports = async (req, res) => {
 
   // Handle preflight request
   if (req.method === 'OPTIONS') {
+    console.log('✅ Preflight request handled');
     return res.status(200).end();
   }
 
   // Only allow POST requests
   if (req.method !== 'POST') {
+    console.log('❌ Method not allowed:', req.method);
     return res.status(405).json({ 
       success: false, 
       error: 'Method not allowed' 
@@ -20,24 +24,30 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log('Received test submission request');
+    console.log('📥 Received POST request');
     
     // Parse JSON body
     let testData;
-    try {
-      testData = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      console.log('Parsed test data for student:', testData.studentName);
-    } catch (parseError) {
-      console.error('JSON parse error:', parseError);
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid JSON data'
-      });
+    if (typeof req.body === 'string') {
+      try {
+        testData = JSON.parse(req.body);
+      } catch (parseError) {
+        console.error('❌ JSON parse error:', parseError);
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid JSON data'
+        });
+      }
+    } else {
+      testData = req.body;
     }
+
+    console.log('👤 Student:', testData.studentName);
+    console.log('📊 Questions:', testData.questions?.length);
 
     // Validate required fields
     if (!testData.studentName || !testData.questions) {
-      console.error('Missing required fields');
+      console.error('❌ Missing required fields');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: studentName and questions are required'
@@ -71,6 +81,14 @@ module.exports = async (req, res) => {
     } else if (testData.leaveCount > 3) {
       submissionReason = 'Too many page leaves';
     }
+
+    // Get environment variables
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+    console.log('🔧 Environment check:');
+    console.log('   TELEGRAM_BOT_TOKEN:', TELEGRAM_BOT_TOKEN ? '✅ Set' : '❌ Missing');
+    console.log('   TELEGRAM_CHAT_ID:', TELEGRAM_CHAT_ID ? '✅ Set' : '❌ Missing');
 
     // Create detailed report for Telegram
     let report = `🎓 *ENGLISH TEST SUBMISSION*\n\n`;
@@ -119,27 +137,24 @@ module.exports = async (req, res) => {
     report += `📈 *Performance:* ${score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : score >= 40 ? 'Average' : 'Needs Improvement'}\n`;
     report += `⏱️ *Completion Time:* ${timeSpentFormatted}\n`;
 
-    console.log('Generated report for Telegram');
+    console.log('📋 Generated report for Telegram');
 
     // Send to Telegram if configured
-    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-    const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
     let telegramSent = false;
     let telegramError = null;
 
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
       try {
-        console.log('Sending to Telegram...');
+        console.log('📤 Sending to Telegram...');
         await sendToTelegram(report, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID);
         telegramSent = true;
         console.log('✅ Telegram notification sent successfully');
-      } catch (telegramError) {
-        console.error('❌ Telegram error:', telegramError.message);
-        telegramError = telegramError.message;
+      } catch (error) {
+        telegramError = error.message;
+        console.error('❌ Telegram error:', error.message);
       }
     } else {
-      console.log('ℹ️ Telegram not configured - missing BOT_TOKEN or CHAT_ID');
-      // Log the report to console for debugging
+      console.log('ℹ️ Telegram not configured - environment variables missing');
       console.log('📧 Report that would be sent to Telegram:');
       console.log(report);
     }
@@ -154,7 +169,7 @@ module.exports = async (req, res) => {
     }
 
     // Return success response
-    res.status(200).json({
+    const responseData = {
       success: true,
       message: 'Test submitted successfully',
       data: {
@@ -164,7 +179,10 @@ module.exports = async (req, res) => {
         telegramSent: telegramSent,
         telegramError: telegramError
       }
-    });
+    };
+
+    console.log('✅ Sending success response');
+    res.status(200).json(responseData);
 
   } catch (error) {
     console.error('💥 Server error:', error);
@@ -179,10 +197,12 @@ module.exports = async (req, res) => {
 async function sendToTelegram(message, botToken, chatId) {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
   
-  console.log('Sending Telegram message to chat:', chatId);
+  console.log('💬 Sending Telegram message to chat:', chatId);
   
   // Split long messages (Telegram has a 4096 character limit)
   if (message.length > 4000) {
+    console.log('📄 Message too long, splitting into parts...');
+    
     // Send in parts
     const part1 = message.substring(0, 4000) + '\n\n... (continued)';
     const part2 = '... (continued)\n\n' + message.substring(4000);
@@ -212,7 +232,7 @@ async function sendSingleMessage(text, url, chatId) {
   const result = await response.json();
   
   if (!result.ok) {
-    throw new Error(result.description || 'Unknown Telegram error');
+    throw new Error(result.description || `Telegram API error: ${JSON.stringify(result)}`);
   }
   
   return result;
