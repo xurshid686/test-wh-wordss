@@ -750,25 +750,26 @@
             };
 
             try {
-                console.log('Submitting test data:', testData);
+                console.log('🔄 Submitting test data...');
                 
                 const response = await fetch('/api/submit', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                    'Accept': 'application/json'
                     },
                     body: JSON.stringify(testData)
                 });
 
-                console.log('Response status:', response.status);
+                console.log('📨 Response status:', response.status);
                 
                 if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ Server error response:', errorText);
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
                 const result = await response.json();
-                console.log('Response data:', result);
+                console.log('✅ Response data:', result);
                 
                 if (result.success) {
                     showCompletionScreen();
@@ -776,7 +777,7 @@
                     throw new Error(result.error || 'Submission failed');
                 }
             } catch (error) {
-                console.error('Submission error:', error);
+                console.error('💥 Submission error:', error);
                 showError('There was an error submitting your test. Please try again. Error: ' + error.message);
             }
         }
